@@ -3,9 +3,11 @@ name: terraform
 on:
   pull_request:
     paths: ['infra/terraform/**', '.github/workflows/terraform.yml']
+
   push:
     branches: [main]
     paths: ['infra/terraform/**', '.github/workflows/terraform.yml']
+
   workflow_dispatch:
     inputs:
       action:
@@ -23,8 +25,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  TF_IN_AUTOMATION: 'true'
-  ARM_USE_OIDC: 'true'
+  TF_IN_AUTOMATION: "true"
+  ARM_USE_OIDC: "true"
   ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
   ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
   ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
@@ -40,11 +42,14 @@ jobs:
         working-directory: infra/terraform
 
     steps:
-      - name: Checkout
+      # -------------------------
+      # Checkout
+      # -------------------------
+      - name: Checkout code
         uses: actions/checkout@v4
 
       # -------------------------
-      # Azure Login (OIDC)
+      # Azure Login (OIDC - FIXED & STABLE)
       # -------------------------
       - name: Azure login (OIDC)
         uses: azure/login@v2
@@ -55,12 +60,13 @@ jobs:
           allow-no-subscriptions: true
 
       # -------------------------
-      # HARDENS CLI CONTEXT (IMPORTANT FIX)
+      # HARD FIX: Force subscription context
+      # (this resolves your "subscription doesn't exist" error)
       # -------------------------
       - name: Set Azure subscription explicitly
         run: az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Verify Azure context
+      - name: Verify Azure context (IMPORTANT DEBUG STEP)
         run: |
           az account show
           az account list -o table
@@ -74,7 +80,7 @@ jobs:
           terraform_version: 1.9.8
 
       # -------------------------
-      # Init backend (remote state)
+      # Init remote backend
       # -------------------------
       - name: Terraform Init
         run: |
@@ -87,7 +93,7 @@ jobs:
       # -------------------------
       # Validation
       # -------------------------
-      - name: Terraform fmt
+      - name: Terraform fmt check
         run: terraform fmt -check -recursive
 
       - name: Terraform validate
