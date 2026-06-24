@@ -1,6 +1,5 @@
 name: terraform
 
-# PR = validate + plan; push to main or manual = apply; manual destroy supported.
 on:
   pull_request:
     paths: ['infra/terraform/**', '.github/workflows/terraform.yml']
@@ -16,12 +15,12 @@ on:
         options: [plan, apply, destroy]
 
 permissions:
-  id-token: write        # OIDC federated login to Azure (no stored cloud secret)
+  id-token: write
   contents: read
 
 concurrency:
   group: terraform-${{ github.ref }}
-  cancel-in-progress: false   # never interrupt an in-flight apply
+  cancel-in-progress: false
 
 env:
   TF_IN_AUTOMATION: 'true'
@@ -33,27 +32,51 @@ env:
 jobs:
   terraform:
     runs-on: ubuntu-latest
-    # 'apply'/'destroy' run in the protected 'production' environment (add required
-    # reviewers in repo Settings → Environments to gate real changes).
+
     environment: ${{ (github.event_name == 'push' || github.event.inputs.action == 'apply' || github.event.inputs.action == 'destroy') && 'production' || '' }}
+
     defaults:
       run:
         working-directory: infra/terraform
-    steps:
-      - uses: actions/checkout@v4
 
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # -------------------------
+      # Azure Login (OIDC)
+      # -------------------------
       - name: Azure login (OIDC)
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          allow-no-subscriptions: true
 
-      - uses: hashicorp/setup-terraform@v3
+      # -------------------------
+      # HARDENS CLI CONTEXT (IMPORTANT FIX)
+      # -------------------------
+      - name: Set Azure subscription explicitly
+        run: az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Verify Azure context
+        run: |
+          az account show
+          az account list -o table
+
+      # -------------------------
+      # Terraform setup
+      # -------------------------
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.8
 
-      - name: Init (remote state)
+      # -------------------------
+      # Init backend (remote state)
+      # -------------------------
+      - name: Terraform Init
         run: |
           terraform init -input=false \
             -backend-config="resource_group_name=${{ vars.TFSTATE_RESOURCE_GROUP }}" \
@@ -61,17 +84,32 @@ jobs:
             -backend-config="container_name=${{ vars.TFSTATE_CONTAINER }}" \
             -backend-config="key=bank-platform.tfstate"
 
-      - run: terraform fmt -check -recursive
-      - run: terraform validate -no-color
+      # -------------------------
+      # Validation
+      # -------------------------
+      - name: Terraform fmt
+        run: terraform fmt -check -recursive
 
-      - name: Plan
+      - name: Terraform validate
+        run: terraform validate -no-color
+
+      # -------------------------
+      # Plan
+      # -------------------------
+      - name: Terraform Plan
         if: github.event.inputs.action != 'destroy'
         run: terraform plan -no-color -input=false -out=tfplan
 
-      - name: Apply
+      # -------------------------
+      # Apply
+      # -------------------------
+      - name: Terraform Apply
         if: github.event_name == 'push' || github.event.inputs.action == 'apply'
         run: terraform apply -no-color -input=false tfplan
 
-      - name: Destroy
+      # -------------------------
+      # Destroy
+      # -------------------------
+      - name: Terraform Destroy
         if: github.event.inputs.action == 'destroy'
         run: terraform destroy -no-color -input=false -auto-approve
