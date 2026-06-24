@@ -1,0 +1,38 @@
+# Federate the two bank MCP servers into one virtual endpoint, and route the
+# gateway's MCP traffic to it. Tool names become accounts_* / payments_*.
+---
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayBackend
+metadata:
+  name: bank-tools
+  namespace: agentgateway-system
+spec:
+  mcp:
+    failureMode: FailOpen
+    targets:
+      - name: accounts
+        static:
+          host: mcp-accounts.bank.svc.cluster.local
+          port: 8090
+          path: /mcp
+          protocol: StreamableHTTP
+      - name: payments
+        static:
+          host: mcp-payments.bank.svc.cluster.local
+          port: 8091
+          path: /mcp
+          protocol: StreamableHTTP
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: bank-mcp
+  namespace: agentgateway-system
+spec:
+  parentRefs:
+    - name: agentgateway-proxy
+  rules:
+    - backendRefs:
+        - name: bank-tools
+          group: enterpriseagentgateway.solo.io
+          kind: EnterpriseAgentgatewayBackend

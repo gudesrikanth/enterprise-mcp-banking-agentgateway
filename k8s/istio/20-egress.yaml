@@ -1,0 +1,36 @@
+# Controlled EGRESS to external services (e.g. a vendor MCP/API). ServiceEntry
+# makes the external host known to the mesh; combined with a deny-by-default
+# egress posture, the bank only reaches allow-listed destinations — a core
+# compliance control. Route via an Envoy egress gateway + Azure NAT for a stable
+# egress IP (see docs/11).
+---
+apiVersion: networking.istio.io/v1
+kind: ServiceEntry
+metadata:
+  name: vendor-mcp
+  namespace: bank
+spec:
+  hosts:
+    - "vendor-mcp.example.com"
+  ports:
+    - number: 443
+      name: https
+      protocol: TLS
+  resolution: DNS
+  location: MESH_EXTERNAL
+---
+# Example deny-by-default egress: only allow-listed external hosts leave the mesh.
+# (Tune to your egress gateway; this illustrates the posture.)
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: bank-egress-allowlist
+  namespace: bank
+spec:
+  action: ALLOW
+  rules:
+    - to:
+        - operation:
+            hosts:
+              - "vendor-mcp.example.com"
+              - "login.microsoftonline.com"   # Entra JWKS / token endpoints

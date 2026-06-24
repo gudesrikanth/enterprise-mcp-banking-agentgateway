@@ -1,0 +1,22 @@
+# Enroll the bank workloads into the Istio AMBIENT mesh (no sidecars) and require
+# mTLS. Prereq: an Istio ambient install — on AKS use the managed add-on
+# (`az aks mesh enable`); locally `istioctl install --set profile=ambient`.
+# NOTE: meant for the properly-sized AKS cluster; do not apply on the strained
+# minikube (it has no Istio installed and is resource-constrained).
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bank
+  labels:
+    istio.io/dataplane-mode: ambient    # every pod in `bank` gets ztunnel mTLS
+---
+# Reject any non-mTLS traffic between meshed workloads in the bank namespace.
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: bank
+spec:
+  mtls:
+    mode: STRICT

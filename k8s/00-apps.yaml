@@ -1,0 +1,114 @@
+# Bank apps in their own namespace. bank-core is internal; the two MCP servers
+# are marked appProtocol kgateway.dev/mcp so agentgateway speaks MCP to them.
+# Images are loaded into minikube (bank/<svc>:0.1.0). On AKS, swap the image:
+# refs for <acr>.azurecr.io/<svc>:<tag>.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bank
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bank-core
+  namespace: bank
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: bank-core } }
+  template:
+    metadata: { labels: { app: bank-core } }
+    spec:
+      containers:
+        - name: bank-core
+          image: bank/bank-core:0.1.0
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8081 }]
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 512Mi }
+          readinessProbe: { httpGet: { path: /actuator/health/readiness, port: 8081 }, initialDelaySeconds: 5, periodSeconds: 5 }
+          livenessProbe:  { httpGet: { path: /actuator/health/liveness,  port: 8081 }, initialDelaySeconds: 10, periodSeconds: 10 }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bank-core
+  namespace: bank
+spec:
+  selector: { app: bank-core }
+  ports: [{ port: 8081, targetPort: 8081 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-accounts
+  namespace: bank
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: mcp-accounts } }
+  template:
+    metadata: { labels: { app: mcp-accounts } }
+    spec:
+      containers:
+        - name: mcp-accounts
+          image: bank/mcp-accounts:0.1.0
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8090 }]
+          env:
+            - name: SPRING_APPLICATION_JSON
+              value: '{"bank":{"core-url":"http://bank-core:8081"}}'
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 512Mi }
+          readinessProbe: { httpGet: { path: /actuator/health/readiness, port: 8090 }, initialDelaySeconds: 5, periodSeconds: 5 }
+          livenessProbe:  { httpGet: { path: /actuator/health/liveness,  port: 8090 }, initialDelaySeconds: 10, periodSeconds: 10 }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-accounts
+  namespace: bank
+spec:
+  selector: { app: mcp-accounts }
+  ports:
+    - port: 8090
+      targetPort: 8090
+      appProtocol: kgateway.dev/mcp
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-payments
+  namespace: bank
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: mcp-payments } }
+  template:
+    metadata: { labels: { app: mcp-payments } }
+    spec:
+      containers:
+        - name: mcp-payments
+          image: bank/mcp-payments:0.1.0
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8091 }]
+          env:
+            - name: SPRING_APPLICATION_JSON
+              value: '{"bank":{"core-url":"http://bank-core:8081"}}'
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 512Mi }
+          readinessProbe: { httpGet: { path: /actuator/health/readiness, port: 8091 }, initialDelaySeconds: 5, periodSeconds: 5 }
+          livenessProbe:  { httpGet: { path: /actuator/health/liveness,  port: 8091 }, initialDelaySeconds: 10, periodSeconds: 10 }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-payments
+  namespace: bank
+spec:
+  selector: { app: mcp-payments }
+  ports:
+    - port: 8091
+      targetPort: 8091
+      appProtocol: kgateway.dev/mcp

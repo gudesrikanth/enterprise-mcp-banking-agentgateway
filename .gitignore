@@ -1,0 +1,20 @@
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+tfplan
+crash.log
+# ignore real tfvars (commit only the example)
+infra/terraform/terraform.tfvars
+# lock file ignored here because local uses OpenTofu and CI uses Terraform
+# (different provider registries). In a single-tool setup, commit a multi-platform
+# lock instead (terraform providers lock -platform=linux_amd64 -platform=...).
+**/.terraform.lock.hcl
+
+# Java / build
+**/target/
+*.log
+
+# OS / IDE
+.DS_Store
+.idea/

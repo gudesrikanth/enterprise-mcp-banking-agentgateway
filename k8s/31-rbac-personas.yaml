@@ -1,0 +1,27 @@
+# Persona / role-based tool authorization, attached to the BACKEND (federation).
+# Applies to both tools/list (catalog visibility) and tools/call (invocation):
+#   - payments-admin  → every tool (incl. transfer_funds)
+#   - teller          → every tool EXCEPT transfer_funds
+#   - no banking role → nothing (effectively denied)
+#
+# NOTE: mcp.tool.name is the UPSTREAM-NATIVE name (transfer_funds), not the
+# federation-prefixed name (payments_transfer_funds) the client sees.
+# Entra app roles arrive in the `roles` claim → jwt.roles (a list).
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: bank-rbac
+  namespace: agentgateway-system
+spec:
+  targetRefs:
+    - group: enterpriseagentgateway.solo.io
+      kind: EnterpriseAgentgatewayBackend
+      name: bank-tools
+  backend:
+    mcp:
+      authorization:
+        policy:
+          matchExpressions:
+            - >-
+              ("payments-admin" in jwt.roles) ||
+              ("teller" in jwt.roles && mcp.tool.name != "transfer_funds")

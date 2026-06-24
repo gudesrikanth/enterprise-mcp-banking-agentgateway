@@ -1,0 +1,120 @@
+name: build-deploy-test
+
+on:
+  push:
+    branches: [main]
+    paths: ['apps/**', 'k8s/**', 'tests/**', '.github/workflows/build-deploy-test.yml']
+  workflow_dispatch:
+
+permissions:
+  id-token: write        # OIDC to Azure
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true   # only the latest commit's deploy matters
+
+env:
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  # ---------------------------------------------------------------- build ---
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        svc: [bank-core, mcp-accounts, mcp-payments]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Build image in ACR
+        run: |
+          az acr build \
+            --registry "${{ vars.ACR_NAME }}" \
+            --image "${{ matrix.svc }}:${{ env.IMAGE_TAG }}" \
+            --image "${{ matrix.svc }}:latest" \
+            "apps/${{ matrix.svc }}"
+
+  # --------------------------------------------------------------- deploy ---
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production     # gate with required reviewers in repo settings
+    steps:
+      - uses: actions/checkout@v4
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Get AKS credentials
+        run: az aks get-credentials -g "${{ vars.AKS_RESOURCE_GROUP }}" -n "${{ vars.AKS_NAME }}" --overwrite-existing
+
+      - name: Ensure agentgateway control plane (idempotent)
+        run: |
+          kubectl apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.0/standard-install.yaml
+          kubectl create namespace agentgateway-system --dry-run=client -o yaml | kubectl apply -f -
+          helm upgrade -i --namespace agentgateway-system --version v2026.6.0 enterprise-agentgateway-crds \
+            oci://us-docker.pkg.dev/solo-public/enterprise-agentgateway/charts/enterprise-agentgateway-crds
+          helm upgrade -i -n agentgateway-system enterprise-agentgateway \
+            oci://us-docker.pkg.dev/solo-public/enterprise-agentgateway/charts/enterprise-agentgateway \
+            --version v2026.6.0 --set-string licensing.licenseKey="${{ secrets.SOLO_TRIAL_LICENSE_KEY }}"
+
+      - name: Deploy apps (image refs -> ACR + this commit's tag)
+        run: |
+          ACR="${{ vars.ACR_NAME }}.azurecr.io"
+          sed "s#image: bank/#image: ${ACR}/#g; s#:0.1.0#:${IMAGE_TAG}#g" k8s/00-apps.yaml | kubectl apply -f -
+
+      - name: Apply gateway params, mesh, federation & policies
+        run: |
+          kubectl apply -f k8s/istio/aks-gateway-parameters.yaml
+          kubectl apply -f k8s/istio/00-ambient.yaml -f k8s/istio/10-waypoint-authz.yaml -f k8s/istio/20-egress.yaml
+          kubectl apply -f k8s/20-federation.yaml -f k8s/30-jwt-entra.yaml \
+                        -f k8s/31-rbac-personas.yaml -f k8s/40-rate-limit.yaml -f k8s/50-telemetry.yaml
+
+      - name: Wait for rollouts
+        run: |
+          for d in bank-core mcp-accounts mcp-payments; do
+            kubectl -n bank rollout status deploy/$d --timeout=180s
+          done
+
+  # ----------------------------------------------------- functional tests ---
+  functional-tests:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Get AKS credentials
+        run: az aks get-credentials -g "${{ vars.AKS_RESOURCE_GROUP }}" -n "${{ vars.AKS_NAME }}" --overwrite-existing
+
+      - name: Mint Entra test token (payments-admin)
+        id: token
+        run: |
+          TOKEN=$(curl -s -X POST "https://login.microsoftonline.com/${{ secrets.BANK_APP_TENANT_ID }}/oauth2/v2.0/token" \
+            -d grant_type=client_credentials \
+            -d client_id="${{ secrets.BANK_APP_CLIENT_ID }}" \
+            -d client_secret="${{ secrets.BANK_APP_CLIENT_SECRET }}" \
+            -d scope="api://${{ secrets.BANK_APP_CLIENT_ID }}/.default" | jq -r .access_token)
+          [ -n "$TOKEN" ] && [ "$TOKEN" != "null" ] || { echo "failed to mint token"; exit 1; }
+          echo "::add-mask::$TOKEN"
+          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+
+      - name: Port-forward the gateway
+        run: |
+          kubectl -n agentgateway-system port-forward svc/agentgateway-proxy 8080:8080 &
+          for i in $(seq 1 30); do curl -s -o /dev/null http://localhost:8080/ && break || sleep 2; done
+
+      - name: Run functional smoke tests
+        run: bash tests/functional/mcp_smoke.sh http://localhost:8080/mcp "${{ steps.token.outputs.token }}"

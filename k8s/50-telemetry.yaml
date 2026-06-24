@@ -1,0 +1,31 @@
+# Custom telemetry: enrich the gateway access logs with the caller's Entra
+# identity + the MCP tool/target, so every tool call is attributable to a human
+# (or workload) for audit. These attributes also flow to traces when the
+# telemetry collector is enabled (scaled to 0 here to save minikube resources;
+# re-enable on AKS — see docs/08-observability-telemetry.md).
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: bank-telemetry
+  namespace: agentgateway-system
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: agentgateway-proxy
+  frontend:
+    accessLog:
+      attributes:
+        add:
+          - name: user.roles
+            expression: jwt.roles
+          - name: user.oid
+            expression: jwt.oid
+          - name: user.appid
+            expression: jwt.appid
+          - name: user.tenant
+            expression: jwt.tid
+          - name: mcp.tool
+            expression: mcp.tool.name
+          - name: mcp.target
+            expression: mcp.tool.target

@@ -1,0 +1,31 @@
+server:
+  port: 8091
+spring:
+  application:
+    name: mcp-payments
+  ai:
+    mcp:
+      server:
+        annotation-scanner:
+          enabled: true
+        name: mcp-payments
+        version: 0.1.0
+        type: sync
+        protocol: streamable
+        streamable-http:
+          mcp-endpoint: /mcp
+        instructions: >
+          Payment tools: transfer_funds (sensitive), list_transfers.
+        capabilities:
+          tool: true
+bank:
+  core-url: http://localhost:8081
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true

@@ -1,0 +1,23 @@
+# Per-tool rate limit: cap the sensitive transfer_funds tool. Uses a CONDITIONAL
+# rate limit — the limit only applies when the called tool is transfer_funds
+# (mcp.tool.name is the upstream-native name). A local token bucket of 3/min is
+# the simplest form; for per-identity quotas use policy.global with descriptors
+# keyed on a jwt claim (see docs/07-rate-limiting.md).
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: bank-ratelimit
+  namespace: agentgateway-system
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: agentgateway-proxy
+  traffic:
+    rateLimit:
+      conditional:
+        - condition: 'mcp.tool.name == "transfer_funds"'
+          policy:
+            local:
+              - requests: 3
+                unit: Minutes

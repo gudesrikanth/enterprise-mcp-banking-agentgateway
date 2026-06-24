@@ -1,0 +1,26 @@
+# AKS flavor of the gateway parameters: ingress via an Azure Load Balancer AND
+# the agentgateway proxy joined to the Istio ambient mesh (so the proxy->MCP hop
+# is mTLS and mesh-load-balanced). Apply this INSTEAD of the minikube
+# bank-platform/.../10-gateway.yaml parameters on AKS.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayParameters
+metadata:
+  name: agentgateway-config
+  namespace: agentgateway-system
+spec:
+  logging:
+    level: info
+  service:
+    spec:
+      type: LoadBalancer          # (1) Azure Load Balancer spreads across replicas
+    metadata:
+      annotations:
+        # internal (private VNet) LB — drop this annotation for a public LB:
+        service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+  deployment:
+    spec:
+      replicas: 2                 # LB targets; scale with HPA in production
+      template:
+        metadata:
+          labels:
+            istio.io/dataplane-mode: ambient   # (3) join the mesh → mTLS east-west

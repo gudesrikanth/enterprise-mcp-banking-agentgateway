@@ -1,0 +1,13 @@
+# Copy to terraform.tfvars and edit. (Or set ARM_SUBSCRIPTION_ID in the env.)
+subscription_id    = "00000000-0000-0000-0000-000000000000"
+name_prefix        = "bankmcp"
+location           = "eastus"
+kubernetes_version = "1.31"
+node_vm_size       = "Standard_D4s_v5"
+node_count         = 3
+
+# Pick a revision supported in your region/version:
+#   az aks mesh get-revisions --location eastus -o table
+istio_revision = "asm-1-24"
+
+acr_sku = "Standard"
