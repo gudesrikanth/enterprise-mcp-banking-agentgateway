@@ -34,9 +34,11 @@ variable "node_vm_size" {
 }
 
 variable "node_count" {
-  type        = number
+  type = number
+  # New subscriptions start with a 10 regional vCPU quota in eastus. 3 x D4s_v7
+  # (12 vCPU) exceeds it; 2 nodes (8 vCPU) fit. Raise to 3 after a quota increase.
   description = "Node count for the system node pool."
-  default     = 3
+  default     = 2
 }
 
 variable "availability_zones" {
