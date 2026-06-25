@@ -18,8 +18,9 @@ variable "location" {
 
 variable "kubernetes_version" {
   type        = string
-  description = "AKS Kubernetes version (must be >= 1.31 for enterprise-agentgateway)."
-  default     = "1.31"
+  description = "AKS Kubernetes version (must be >= 1.31 for enterprise-agentgateway). Null => let AKS choose its default supported version (avoids pinning an LTS-only patch like 1.31.13). Pin via `az aks get-versions --location <loc>` if needed."
+  default     = null
+  nullable    = true
 }
 
 variable "node_vm_size" {
