@@ -28,7 +28,9 @@ variable "node_vm_size" {
   # The enterprise stack (controller, ext-auth, rate-limiter, telemetry) + Istio
   # + the bank apps need real headroom — see docs/04 (the minikube starvation).
   description = "VM size for the system node pool."
-  default     = "Standard_D4s_v5"
+  # D*s_v5 is not offered on this subscription in eastus; the region exposes the
+  # v7 family. D4s_v7 = 4 vCPU general purpose (same shape as D4s_v5).
+  default = "Standard_D4s_v7"
 }
 
 variable "node_count" {
