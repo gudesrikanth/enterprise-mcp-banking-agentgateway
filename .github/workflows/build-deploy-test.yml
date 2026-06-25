@@ -83,6 +83,15 @@ jobs:
           for d in bank-core mcp-accounts mcp-payments; do
             kubectl -n bank rollout status deploy/$d --timeout=180s
           done
+          # The enterprise controller provisions the proxy Deployment+Service
+          # (named after the Gateway) asynchronously - wait for it to appear.
+          echo "waiting for agentgateway-proxy to be provisioned..."
+          for i in $(seq 1 60); do
+            kubectl -n agentgateway-system get deploy/agentgateway-proxy >/dev/null 2>&1 && break
+            sleep 5
+          done
+          kubectl -n agentgateway-system rollout status deploy/agentgateway-proxy --timeout=180s
+          kubectl -n agentgateway-system wait --for=condition=Programmed gateway/agentgateway-proxy --timeout=120s
 
   # ----------------------------------------------------- functional tests ---
   functional-tests:

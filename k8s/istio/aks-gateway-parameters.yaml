@@ -24,3 +24,29 @@ spec:
         metadata:
           labels:
             istio.io/dataplane-mode: ambient   # (3) join the mesh → mTLS east-west
+---
+# The agentgateway proxy itself: the enterprise controller provisions a
+# Deployment + Service named after this Gateway (agentgateway-proxy) from the
+# parameters above. The HTTPRoute (k8s/20-federation.yaml) and the JWT/RBAC/
+# rate-limit/telemetry policies all targetRef this Gateway by name. On minikube
+# this lived in the shared mcp-playground install; on a fresh AKS cluster it must
+# be created here or no proxy/service exists.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: agentgateway-proxy
+  namespace: agentgateway-system
+spec:
+  gatewayClassName: enterprise-agentgateway
+  infrastructure:
+    parametersRef:
+      group: enterpriseagentgateway.solo.io
+      kind: EnterpriseAgentgatewayParameters
+      name: agentgateway-config
+  listeners:
+    - name: http
+      port: 8080
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: All
