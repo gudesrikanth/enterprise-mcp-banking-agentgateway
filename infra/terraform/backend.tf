@@ -3,5 +3,11 @@
 # secrets live in code. For local validate without a backend:
 #   tofu init -backend=false && tofu validate
 terraform {
-  backend "azurerm" {}
+  backend "azurerm" {
+    # Authenticate to the state storage account with the OIDC service principal
+    # (no storage access key / SAS token committed or required). The SP needs the
+    # "Storage Blob Data Contributor" role on the state storage account.
+    use_azuread_auth = true
+    use_oidc         = true
+  }
 }
