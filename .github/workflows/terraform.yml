@@ -60,22 +60,11 @@ jobs:
           enable-AzPSSession: false
 
       # -------------------------
-      # HARD FIX: Force subscription context
-      # (this resolves your "subscription doesn't exist" error)
+      # Verify Azure context (azure/login@v2 above already set it)
       # -------------------------
-      - name: Set Azure subscription explicitly
+      - name: Verify Azure context
         run: |
-          az account clear
-          az login --service-principal \
-            -u ${{ secrets.AZURE_CLIENT_ID }} \
-            -t ${{ secrets.AZURE_TENANT_ID }} \
-            --allow-no-subscriptions --federated-token $(cat $ACTIONS_ID_TOKEN_REQUEST_TOKEN)
-
-          az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Verify Azure context (IMPORTANT DEBUG STEP)
-        run: |
-          az account show
+          az account show -o table
           az account list -o table
 
       # -------------------------
