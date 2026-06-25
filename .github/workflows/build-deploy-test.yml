@@ -102,12 +102,18 @@ jobs:
       - name: Mint Entra test token (payments-admin)
         id: token
         run: |
-          TOKEN=$(curl -s -X POST "https://login.microsoftonline.com/${{ secrets.BANK_APP_TENANT_ID }}/oauth2/v2.0/token" \
+          RESP=$(curl -s -X POST "https://login.microsoftonline.com/${{ secrets.BANK_APP_TENANT_ID }}/oauth2/v2.0/token" \
             -d grant_type=client_credentials \
             -d client_id="${{ secrets.BANK_APP_CLIENT_ID }}" \
             -d client_secret="${{ secrets.BANK_APP_CLIENT_SECRET }}" \
-            -d scope="api://${{ secrets.BANK_APP_CLIENT_ID }}/.default" | jq -r .access_token)
-          [ -n "$TOKEN" ] && [ "$TOKEN" != "null" ] || { echo "failed to mint token"; exit 1; }
+            -d scope="api://${{ secrets.BANK_APP_CLIENT_ID }}/.default")
+          TOKEN=$(echo "$RESP" | jq -r '.access_token // empty')
+          if [ -z "$TOKEN" ]; then
+            # error/error_description never contain the secret - safe to print
+            echo "failed to mint token:"
+            echo "$RESP" | jq -r '{error, error_description, correlation_id}'
+            exit 1
+          fi
           echo "::add-mask::$TOKEN"
           echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
 
