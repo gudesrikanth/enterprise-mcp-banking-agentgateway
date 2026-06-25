@@ -36,6 +36,12 @@ variable "node_count" {
   default     = 3
 }
 
+variable "availability_zones" {
+  type        = list(number)
+  description = "AKS node pool availability zones. Leave empty on subscriptions/regions that do not support AKS zones (e.g. new Pay-As-You-Go subs in eastus)."
+  default     = []
+}
+
 variable "istio_revision" {
   type = string
   # Pick a revision supported in your region/k8s version:

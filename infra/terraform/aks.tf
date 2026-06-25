@@ -15,8 +15,10 @@ resource "azurerm_kubernetes_cluster" "aks" {
     node_count     = var.node_count
     vm_size        = var.node_vm_size
     vnet_subnet_id = azurerm_subnet.aks.id
-    # spread across zones for HA
-    zones = [1, 2, 3]
+    # spread across availability zones for HA. Some subscriptions/regions do not
+    # support AKS zones (e.g. new Pay-As-You-Go subs report supported zones = '');
+    # set var.availability_zones = [] there. null/[] => no zone pinning.
+    zones = length(var.availability_zones) > 0 ? var.availability_zones : null
   }
 
   identity {
