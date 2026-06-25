@@ -50,7 +50,9 @@ variable "istio_revision" {
   # Pick a revision supported in your region/k8s version:
   #   az aks mesh get-revisions --location <location> -o table
   description = "Managed Istio (ASM) revision for the AKS mesh add-on."
-  default     = "asm-1-24"
+  # eastus supports asm-1-28 / asm-1-29 (az aks mesh get-revisions). asm-1-29 is
+  # compatible with k8s 1.31-1.36, covering whatever default version AKS selects.
+  default = "asm-1-29"
 }
 
 variable "acr_sku" {
