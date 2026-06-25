@@ -56,13 +56,18 @@ res=$(call '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"paym
 echo "$res" | grep -q '"status":"POSTED"' || fail "transfer_funds not POSTED (got: ${res:0:160})"
 pass "payments_transfer_funds POSTED"
 
-# --- 5) rate limit: transfer_funds capped (3/min) -> a 429 within 5 calls --
+# --- 5) rate limit: transfer_funds capped -> a 429 under rapid fire ---------
+# The policy is a LOCAL token bucket of 3/min, enforced PER proxy replica. With
+# replicas=2 behind the Service, up to 2x3=6 calls can succeed before any pod
+# starts returning 429, so we must fire >6 to deterministically trip it
+# regardless of how the Service spreads the calls. (For a true cluster-wide cap
+# independent of replica count, use a global rate limit - see docs/07.)
 got429=no
-for i in 1 2 3 4 5; do
+for i in $(seq 1 8); do
   c=$(http_call '{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"payments_transfer_funds","arguments":{"fromAccountId":"ACC-1001","toAccountId":"ACC-1002","amountCents":1}}}')
   [ "$c" = "429" ] && { got429=yes; break; }
 done
-[ "$got429" = "yes" ] || fail "rate limit: expected a 429 within 5 rapid transfers"
+[ "$got429" = "yes" ] || fail "rate limit: expected a 429 within 8 rapid transfers"
 pass "rate limit on transfer_funds (429)"
 
 echo "ALL FUNCTIONAL TESTS PASSED"
